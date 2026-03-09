@@ -1,14 +1,14 @@
 [package]
 name = "rets_expression"
-version = "0.2.3"
-authors = ["Bryan Burgers <bryan@burgers.io>"]
+version = "1.0.0"
+authors = ["Paul Redmond", "Bryan Burgers <bryan@burgers.io>"]
 edition = "2021"
 license = "MIT"
 description = "Implementation of RETS Validation Expressions from RESO RCP19"
 readme = "README.md"
 documentation = "https://docs.rs/rets_expression"
-homepage = "https://github.com/zenlist/rets_expression"
-repository = "https://github.com/zenlist/rets_expression"
+homepage = "https://github.com/paulredmond/rets_expression"
+repository = "https://github.com/paulredmond/rets_expression"
 keywords = ["rets", "validation", "expression", "reso", "rcp19"]
 
 [dependencies]
