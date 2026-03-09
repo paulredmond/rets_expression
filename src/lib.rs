@@ -847,9 +847,9 @@ impl ExpressionOp {
 
         fn add_date_number(left: &str, right: &serde_json::Number) -> Result<Value, Error> {
             if let Ok(date) = NaiveDate::parse_from_str(left, "%Y-%m-%d") {
-                let days = right.as_f64().ok_or(Error::InvalidNumber)? as u64;
+                let days = right.as_f64().ok_or(Error::InvalidNumber)? as i64;
                 let new_date = date
-                    .checked_add_days(chrono::Days::new(days))
+                    .checked_add_signed(chrono::Duration::days(days))
                     .ok_or(Error::InvalidType)?;
                 Ok(Value::String(new_date.format("%Y-%m-%d").to_string()))
             } else if let Ok(timestamp) = DateTime::parse_from_rfc3339(left) {
@@ -872,9 +872,9 @@ impl ExpressionOp {
 
         fn subtract_date_number(left: &str, right: &serde_json::Number) -> Result<Value, Error> {
             if let Ok(date) = NaiveDate::parse_from_str(left, "%Y-%m-%d") {
-                let days = right.as_f64().ok_or(Error::InvalidNumber)? as u64;
+                let days = right.as_f64().ok_or(Error::InvalidNumber)? as i64;
                 let new_date = date
-                    .checked_sub_days(chrono::Days::new(days))
+                    .checked_sub_signed(chrono::Duration::days(days))
                     .ok_or(Error::InvalidType)?;
                 Ok(Value::String(new_date.format("%Y-%m-%d").to_string()))
             } else if let Ok(timestamp) = DateTime::parse_from_rfc3339(left) {
@@ -1343,7 +1343,15 @@ pub trait Visitor {
 #[cfg(all(feature = "std", test))]
 mod tests {
     use super::*;
+    use chrono::Local;
     use serde_json::json;
+
+    fn eval(expr: &str, data: serde_json::Value) -> serde_json::Value {
+        let expression = expr.parse::<Expression>().unwrap();
+        let engine = Engine::default();
+        let context = EvaluateContext::new(&engine, &data);
+        expression.apply(context).unwrap().into_owned()
+    }
 
     #[test]
     fn test_basic() {
@@ -1395,5 +1403,95 @@ mod tests {
 
         let serialized = expression.serialize().unwrap();
         assert_eq!(serialized, "5 .IN. LIST(1, 2, Three, LAST Four, Five)");
+    }
+
+    #[test]
+    fn test_add_date_positive_days() {
+        let data = json!({ "D": "2026-01-01" });
+        let result = eval("D + 7", data);
+        assert_eq!(result, json!("2026-01-08"));
+    }
+
+    #[test]
+    fn test_add_date_negative_days() {
+        let data = json!({ "D": "2026-01-08" });
+        let result = eval("D + (0 - 7)", data);
+        assert_eq!(result, json!("2026-01-01"));
+    }
+
+    #[test]
+    fn test_add_date_negative_one() {
+        let data = json!({ "D": "2026-03-01" });
+        let result = eval("D + (0 - 1)", data);
+        assert_eq!(result, json!("2026-02-28"));
+    }
+
+    #[test]
+    fn test_add_date_negative_large() {
+        let data = json!({ "D": "2026-01-01" });
+        let result = eval("D + (0 - 365)", data);
+        assert_eq!(result, json!("2025-01-01"));
+    }
+
+    #[test]
+    fn test_subtract_date_positive_days() {
+        let data = json!({ "D": "2026-01-08" });
+        let result = eval("D - 7", data);
+        assert_eq!(result, json!("2026-01-01"));
+    }
+
+    #[test]
+    fn test_subtract_date_negative_days() {
+        let data = json!({ "D": "2026-01-01" });
+        let result = eval("D - (0 - 7)", data);
+        assert_eq!(result, json!("2026-01-08"));
+    }
+
+    #[test]
+    fn test_date_within_last_7_days_using_negative_addition() {
+        let today = Local::now().date_naive();
+        let three_days_ago = today - chrono::Duration::days(3);
+        let data = json!({ "D": three_days_ago.format("%Y-%m-%d").to_string() });
+        let result = eval("D >= .TODAY. + (0 - 7)", data);
+        assert_eq!(result, json!(true));
+    }
+
+    #[test]
+    fn test_date_outside_last_7_days_using_negative_addition() {
+        let today = Local::now().date_naive();
+        let ten_days_ago = today - chrono::Duration::days(10);
+        let data = json!({ "D": ten_days_ago.format("%Y-%m-%d").to_string() });
+        let result = eval("D >= .TODAY. + (0 - 7)", data);
+        assert_eq!(result, json!(false));
+    }
+
+    #[test]
+    fn test_date_range_both_bounds_negative_offset() {
+        let today = Local::now().date_naive();
+        let fifteen_days_ago = today - chrono::Duration::days(15);
+        let data = json!({ "D": fifteen_days_ago.format("%Y-%m-%d").to_string() });
+        let result = eval("D >= .TODAY. + (0 - 30) .AND. D <= .TODAY.", data);
+        assert_eq!(result, json!(true));
+    }
+
+    #[test]
+    fn test_add_date_zero_days() {
+        let data = json!({ "D": "2026-06-15" });
+        let result = eval("D + 0", data);
+        assert_eq!(result, json!("2026-06-15"));
+    }
+
+    #[test]
+    fn test_add_date_negative_crosses_month_boundary() {
+        let data = json!({ "D": "2026-03-05" });
+        let result = eval("D + (0 - 5)", data);
+        assert_eq!(result, json!("2026-02-28"));
+    }
+
+    #[test]
+    fn test_add_date_negative_crosses_year_boundary() {
+        let data = json!({ "D": "2026-01-05" });
+        let result = eval("D + (0 - 10)", data);
+        assert_eq!(result, json!("2025-12-26"));
     }
 }
