@@ -7,3 +7,12 @@ Transport group][transport].
 See [the docs](https://docs.rs/rets_expression) for usage.
 
 This repo tests against the compliance tests at [https://github.com/zenlist/reso-rcp19-compliance-tests](https://github.com/zenlist/reso-rcp19-compliance-tests)
+
+## Running tests
+
+Initialize the compliance test submodule, then run the full test suite:
+
+```sh
+git submodule update --init --recursive
+cargo test
+```

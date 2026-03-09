@@ -158,6 +158,7 @@ fn prod_exp(input: &mut &[Token<'_>]) -> PResult<Expression> {
 
 fn atom_exp(input: &mut &[Token<'_>]) -> PResult<Expression> {
     alt((
+        unary_minus_exp,
         func_exp,
         collection_exp,
         parenthesized_exp,
@@ -165,6 +166,15 @@ fn atom_exp(input: &mut &[Token<'_>]) -> PResult<Expression> {
         value_exp,
     ))
     .parse_next(input)
+}
+
+fn unary_minus_exp(input: &mut &[Token<'_>]) -> PResult<Expression> {
+    (BinaryOperator::Minus, atom_exp)
+        .map(|(_, inner)| {
+            let zero = Expression::from(LiteralNode::new(serde_json::Value::from(0i64)));
+            Expression::from(OpNode::new(zero, ExpressionOp::Sub, inner))
+        })
+        .parse_next(input)
 }
 
 fn parenthesized_exp(input: &mut &[Token<'_>]) -> PResult<Expression> {
@@ -307,7 +317,8 @@ fn retsname<'a>(input: &mut &[Token<'a>]) -> PResult<Identifier<'a>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::Expression;
+    use crate::{Engine, EvaluateContext, Expression};
+    use serde_json::json;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -367,5 +378,57 @@ mod tests {
         let start = Instant::now();
         let _expression = input.parse::<Expression>().expect("successful parse");
         assert!(start.elapsed() < Duration::from_millis(500));
+    }
+
+    #[test]
+    fn test_negative_float_in_comparison() {
+        // Regression: `Longitude >= -180.0` previously failed to parse because `-` was always
+        // tokenized as BinaryOperator(Minus) before Float got a chance to include it.
+        "(Longitude >= -180.0) .AND. (Longitude <= 180.0)"
+            .parse::<Expression>()
+            .expect("negative float in comparison should parse");
+    }
+
+    #[test]
+    fn test_negative_int_in_comparison() {
+        "X >= -10"
+            .parse::<Expression>()
+            .expect("negative int in comparison should parse");
+    }
+
+    #[test]
+    fn test_double_negative() {
+        // `0 - -1` should parse as `0 - (0 - 1)` = 1
+        let expr = "0 - -1".parse::<Expression>().expect("double negative should parse");
+        let engine = Engine::default();
+        let context = json!({});
+        let ctx = EvaluateContext::new(&engine, &context);
+        let result = expr.apply(ctx).unwrap();
+        assert_eq!(result.into_owned(), json!(1));
+    }
+
+    #[test]
+    fn test_negative_number_eval() {
+        // `-10 + 5` desugars to `(0 - 10) + 5` = -5
+        let expr = "-10 + 5".parse::<Expression>().expect("should parse");
+        let engine = Engine::default();
+        let context = json!({});
+        let ctx = EvaluateContext::new(&engine, &context);
+        let result = expr.apply(ctx).unwrap();
+        assert_eq!(result.into_owned(), json!(-5));
+    }
+
+    #[test]
+    fn test_negative_float_eval() {
+        // Note: `-180.0` serializes back as `(0 - 180.0)` — round-trip is not symmetric,
+        // but evaluation is correct.
+        let expr = "Longitude >= -180.0"
+            .parse::<Expression>()
+            .expect("should parse");
+        let engine = Engine::default();
+        let context = json!({ "Longitude": -90.0 });
+        let ctx = EvaluateContext::new(&engine, &context);
+        let result = expr.apply(ctx).unwrap();
+        assert_eq!(result.into_owned(), json!(true));
     }
 }
