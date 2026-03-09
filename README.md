@@ -8,6 +8,24 @@ See [the docs](https://docs.rs/rets_expression) for usage.
 
 This repo tests against the compliance tests at [https://github.com/zenlist/reso-rcp19-compliance-tests](https://github.com/zenlist/reso-rcp19-compliance-tests)
 
+## Installation
+
+Add to your project's `Cargo.toml` using a specific release tag (recommended):
+
+```toml
+[dependencies]
+rets_expression = { git = "https://github.com/paulredmond/rets_expression", tag = "v1.0.0" }
+```
+
+Or track the latest `main` branch:
+
+```toml
+[dependencies]
+rets_expression = { git = "https://github.com/paulredmond/rets_expression", branch = "main" }
+```
+
+Then run `cargo build` to fetch and compile the dependency.
+
 ## Running tests
 
 Initialize the compliance test submodule, then run the full test suite:
