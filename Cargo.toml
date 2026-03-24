@@ -1,6 +1,6 @@
 [package]
 name = "rets_expression"
-version = "1.0.1"
+version = "1.1.0"
 authors = ["Paul Redmond", "Bryan Burgers <bryan@burgers.io>"]
 edition = "2021"
 license = "MIT"
