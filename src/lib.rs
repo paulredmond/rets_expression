@@ -100,6 +100,17 @@ pub enum Expression {
     ///
     /// E.g. `(1, 2, 3)`
     List(ListNode),
+    /// A reference to the current field's value (`.ENTRY.`)
+    ///
+    /// The field is determined by the evaluation context, not the expression itself.
+    /// Use [`EvaluateContext::with_entry_field`] to set the field name before evaluation.
+    Entry,
+    /// A reference to the previous value of the current field (`.OLDVALUE.`)
+    ///
+    /// The field is determined by the evaluation context, not the expression itself.
+    /// Use [`EvaluateContext::with_entry_field`] combined with
+    /// [`EvaluateContext::with_previous`] to set the field name and previous data.
+    OldValue,
 }
 
 impl Expression {
@@ -194,6 +205,12 @@ impl Expression {
                         continue;
                     }
                     visitor.visit_list_expression_out(self);
+                }
+                Expression::Entry => {
+                    visitor.visit_entry_expression(self);
+                }
+                Expression::OldValue => {
+                    visitor.visit_old_value_expression(self);
                 }
             }
             visitor.visit_expression_out(self);
@@ -1167,6 +1184,29 @@ impl Expression {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(Cow::Owned(serde_json::json!(args)))
             }
+            Expression::Entry => {
+                let field_name = context
+                    .entry_field()
+                    .ok_or(Error::EntryFieldNotProvided)?;
+                Ok(context
+                    .value()
+                    .get(field_name)
+                    .map(Cow::Borrowed)
+                    .unwrap_or_else(|| Cow::Owned(Value::Null)))
+            }
+            Expression::OldValue => {
+                let field_name = context
+                    .entry_field()
+                    .ok_or(Error::EntryFieldNotProvided)?;
+                if let Some(previous_value) = context.previous_value() {
+                    Ok(previous_value
+                        .get(field_name)
+                        .map(Cow::Borrowed)
+                        .unwrap_or_else(|| Cow::Owned(Value::Null)))
+                } else {
+                    Err(Error::LastUsedWithoutPreviousValue)
+                }
+            }
         }
     }
 }
@@ -1206,6 +1246,8 @@ pub enum Error {
     UnknownFunction(String),
     /// A function call failed
     Function(function::FunctionError),
+    /// `.ENTRY.` or `.OLDVALUE.` was used but no entry field was provided in the context
+    EntryFieldNotProvided,
 }
 
 impl core::fmt::Display for Error {
@@ -1220,6 +1262,9 @@ impl core::fmt::Display for Error {
             Error::DivideByZero => f.write_str("Divide by zero"),
             Error::UnknownFunction(name) => write!(f, "Unknown function: {name}"),
             Error::Function(err) => write!(f, "Error while executing function: {err}"),
+            Error::EntryFieldNotProvided => {
+                f.write_str("`.ENTRY.` or `.OLDVALUE.` was used but no entry field was provided in the context")
+            }
         }
     }
 }
@@ -1338,6 +1383,10 @@ pub trait Visitor {
     fn visit_list_expression_in(&mut self, expression: &mut Expression) {}
     /// Called when the visitor visits an expression representing a [`ListNode`] after visiting its children
     fn visit_list_expression_out(&mut self, expression: &mut Expression) {}
+    /// Called when the visitor visits an `.ENTRY.` expression
+    fn visit_entry_expression(&mut self, expression: &mut Expression) {}
+    /// Called when the visitor visits an `.OLDVALUE.` expression
+    fn visit_old_value_expression(&mut self, expression: &mut Expression) {}
 }
 
 #[cfg(all(feature = "std", test))]
@@ -1493,5 +1542,95 @@ mod tests {
         let data = json!({ "D": "2026-01-05" });
         let result = eval("D + (0 - 10)", data);
         assert_eq!(result, json!("2025-12-26"));
+    }
+
+    #[test]
+    fn test_entry_evaluates_to_field_value() {
+        let expression = ".ENTRY. = .EMPTY."
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({ "Remarks": "Hello" });
+        let context = EvaluateContext::new(&engine, &data).with_entry_field("Remarks");
+        let result = expression.apply(context).unwrap();
+        assert_eq!(result.into_owned(), json!(false));
+    }
+
+    #[test]
+    fn test_entry_evaluates_to_null_for_missing_field() {
+        let expression = ".ENTRY. = .EMPTY."
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({});
+        let context = EvaluateContext::new(&engine, &data).with_entry_field("Remarks");
+        let result = expression.apply(context).unwrap();
+        assert_eq!(result.into_owned(), json!(true));
+    }
+
+    #[test]
+    fn test_entry_errors_without_entry_field() {
+        let expression = ".ENTRY. = .EMPTY."
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({ "Remarks": "Hello" });
+        let context = EvaluateContext::new(&engine, &data);
+        let result = expression.apply(context);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_oldvalue_evaluates_to_previous_value() {
+        let expression = ".OLDVALUE. != .ENTRY."
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({ "Status": "Active" });
+        let previous = json!({ "Status": "Pending" });
+        let context = EvaluateContext::new(&engine, &data)
+            .with_entry_field("Status")
+            .with_previous(&previous);
+        let result = expression.apply(context).unwrap();
+        assert_eq!(result.into_owned(), json!(true));
+    }
+
+    #[test]
+    fn test_oldvalue_errors_without_previous_value() {
+        let expression = ".OLDVALUE. != .EMPTY."
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({ "Status": "Active" });
+        let context = EvaluateContext::new(&engine, &data)
+            .with_entry_field("Status");
+        let result = expression.apply(context);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_oldvalue_errors_without_entry_field() {
+        let expression = ".OLDVALUE. != .EMPTY."
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({ "Status": "Active" });
+        let previous = json!({ "Status": "Pending" });
+        let context = EvaluateContext::new(&engine, &data)
+            .with_previous(&previous);
+        let result = expression.apply(context);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_entry_in_function_evaluates() {
+        let expression = "STRLEN(CHAR(.ENTRY.)) > 0"
+            .parse::<Expression>()
+            .unwrap();
+        let engine = Engine::default();
+        let data = json!({ "ListingId": "12345" });
+        let context = EvaluateContext::new(&engine, &data).with_entry_field("ListingId");
+        let result = expression.apply(context).unwrap();
+        assert_eq!(result.into_owned(), json!(true));
     }
 }

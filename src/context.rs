@@ -12,6 +12,7 @@ pub struct EvaluateContext<'engine, 'json, T> {
     engine: &'engine Engine<T>,
     value: &'json Value,
     previous_value: Option<&'json Value>,
+    entry_field: Option<&'json str>,
     state: T,
 }
 
@@ -22,6 +23,7 @@ impl<'engine, 'json> EvaluateContext<'engine, 'json, ()> {
             engine,
             value,
             previous_value: None,
+            entry_field: None,
             state: (),
         }
     }
@@ -33,6 +35,7 @@ impl<'engine, 'json, T> EvaluateContext<'engine, 'json, T> {
         EvaluateContext {
             value,
             previous_value: None,
+            entry_field: None,
             engine,
             state,
         }
@@ -53,6 +56,16 @@ impl<'engine, 'json, T> EvaluateContext<'engine, 'json, T> {
         self
     }
 
+    /// Set the entry field name for evaluating `.ENTRY.` and `.OLDVALUE.` expressions
+    ///
+    /// The entry field is the name of the field that the current rule applies to.
+    /// `.ENTRY.` resolves to this field's current value, and `.OLDVALUE.` resolves
+    /// to this field's previous value.
+    pub fn with_entry_field(mut self, field_name: &'json str) -> Self {
+        self.entry_field = Some(field_name);
+        self
+    }
+
     /// Get a reference to the value within this context
     pub fn value(&self) -> &'json Value {
         self.value
@@ -61,6 +74,11 @@ impl<'engine, 'json, T> EvaluateContext<'engine, 'json, T> {
     /// Get a reference to the previous value within this context, if available
     pub fn previous_value(&self) -> Option<&'json Value> {
         self.previous_value
+    }
+
+    /// Get the entry field name, if set
+    pub fn entry_field(&self) -> Option<&'json str> {
+        self.entry_field
     }
 
     /// Get a reference to the engine used when creating this context
