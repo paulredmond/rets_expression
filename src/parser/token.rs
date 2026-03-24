@@ -135,6 +135,8 @@ pub enum DottedKeyword {
     Null,
     Today,
     Now,
+    Entry,
+    OldValue,
 }
 
 impl<'s, 't, E: ParserError<&'s [Token<'t>]>> Parser<&'s [Token<'t>], DottedKeyword, E>
@@ -288,6 +290,8 @@ impl DottedKeyword {
                 "NULL" => Some(DottedKeyword::Null),
                 "TODAY" => Some(DottedKeyword::Today),
                 "NOW" => Some(DottedKeyword::Now),
+                "ENTRY" => Some(DottedKeyword::Entry),
+                "OLDVALUE" => Some(DottedKeyword::OldValue),
                 _ => None,
             })
             .parse_next(i)

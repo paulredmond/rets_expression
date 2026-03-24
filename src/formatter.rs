@@ -15,6 +15,8 @@ impl Expression {
             Expression::Field(_) => 0,
             Expression::LastField(_) => 0,
             Expression::Literal(_) => 0,
+            Expression::Entry => 0,
+            Expression::OldValue => 0,
             Expression::Function(_) => 1,
             Expression::Iif(_) => 1,
             Expression::List(_) => 1, // TODO: What's the right precedence here?
@@ -137,6 +139,8 @@ impl Expression {
                 writer.write_char(')')?;
                 Ok(())
             }
+            Expression::Entry => writer.write_str(".ENTRY."),
+            Expression::OldValue => writer.write_str(".OLDVALUE."),
         }
     }
 }
@@ -197,6 +201,22 @@ mod tests {
             let parsed = expr.parse::<Expression>().unwrap();
             let serialized = parsed.serialize().unwrap();
             assert_eq!(serialized, expr);
+        }
+    }
+
+    #[test]
+    fn entry_round_trips() {
+        let exprs = [
+            ".ENTRY. = .EMPTY.",
+            ".OLDVALUE. != .EMPTY.",
+            "IIF(ListPrice > 0, .EMPTY., .ENTRY.)",
+            ".OLDVALUE. != .ENTRY.",
+        ];
+
+        for expr in exprs {
+            let parsed = expr.parse::<Expression>().unwrap();
+            let serialized = parsed.serialize().unwrap();
+            assert_eq!(serialized, expr, "round-trip failed for: {expr}");
         }
     }
 }

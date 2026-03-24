@@ -266,6 +266,8 @@ fn spec_value(input: &mut &[Token<'_>]) -> PResult<Expression> {
         )))),
         DottedKeyword::Now.value(Expression::from(FunctionNode::new("NOW", []))),
         DottedKeyword::Today.value(Expression::from(FunctionNode::new("TODAY", []))),
+        DottedKeyword::Entry.value(Expression::Entry),
+        DottedKeyword::OldValue.value(Expression::OldValue),
     ))
     .parse_next(input)
 }
@@ -430,5 +432,40 @@ mod tests {
         let ctx = EvaluateContext::new(&engine, &context);
         let result = expr.apply(ctx).unwrap();
         assert_eq!(result.into_owned(), json!(true));
+    }
+
+    #[test]
+    fn test_entry_parses() {
+        ".ENTRY. = .EMPTY."
+            .parse::<Expression>()
+            .expect(".ENTRY. should parse");
+    }
+
+    #[test]
+    fn test_oldvalue_parses() {
+        ".OLDVALUE. != .EMPTY."
+            .parse::<Expression>()
+            .expect(".OLDVALUE. should parse");
+    }
+
+    #[test]
+    fn test_entry_in_function_call() {
+        "MATCH(CHAR(.ENTRY.), '^[0-9]+$')"
+            .parse::<Expression>()
+            .expect(".ENTRY. inside function call should parse");
+    }
+
+    #[test]
+    fn test_entry_in_iif() {
+        "IIF(ListPrice > 0, .EMPTY., .ENTRY.)"
+            .parse::<Expression>()
+            .expect(".ENTRY. in IIF should parse");
+    }
+
+    #[test]
+    fn test_oldvalue_in_comparison() {
+        ".OLDVALUE. != .ENTRY."
+            .parse::<Expression>()
+            .expect(".OLDVALUE. compared to .ENTRY. should parse");
     }
 }
