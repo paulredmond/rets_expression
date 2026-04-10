@@ -224,9 +224,8 @@ pub fn token<'a>(i: &mut Located<&'a str>) -> PResult<Token<'a>> {
         Atom::parse.map(Token::Atom),
         SingleQuotedTerm::parse.map(Token::SingleQuotedTerm),
         DoubleQuotedTerm::parse.map(Token::DoubleQuotedTerm),
-        // double_quoted_term,
-        // iso_timestamp,
-        // iso_date,
+        IsoTimestamp::parse.map(Token::IsoTimestamp),
+        IsoDate::parse.map(Token::IsoDate),
     ))
     .parse_next(i)
 }
@@ -452,6 +451,46 @@ impl<'a> Float<'a> {
         alt((dot_number, number_e, number_dot_number)).parse_next(i)
     }
     pub fn as_str(&self) -> &'a str {
+        self.0
+    }
+}
+
+impl<'a> IsoTimestamp<'a> {
+    fn parse(i: &mut Located<&'a str>) -> PResult<Self> {
+        // #YYYY-MM-DDTHH:MM:SS# with optional fractional seconds and timezone
+        (
+            '#',
+            take_while(1.., |c: char| c != '#'),
+            '#',
+        )
+            .verify(|(_, inner, _): &(char, &str, char)| {
+                chrono::DateTime::parse_from_rfc3339(inner).is_ok()
+            })
+            .map(|(_, inner, _)| IsoTimestamp(inner))
+            .parse_next(i)
+    }
+
+    pub fn value(&self) -> &'a str {
+        self.0
+    }
+}
+
+impl<'a> IsoDate<'a> {
+    fn parse(i: &mut Located<&'a str>) -> PResult<Self> {
+        // #YYYY-MM-DD#
+        (
+            '#',
+            take_while(1.., |c: char| c != '#'),
+            '#',
+        )
+            .verify(|(_, inner, _): &(char, &str, char)| {
+                chrono::NaiveDate::parse_from_str(inner, "%Y-%m-%d").is_ok()
+            })
+            .map(|(_, inner, _)| IsoDate(inner))
+            .parse_next(i)
+    }
+
+    pub fn value(&self) -> &'a str {
         self.0
     }
 }

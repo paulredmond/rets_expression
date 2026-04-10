@@ -3,7 +3,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use serde_json::json;
 use winnow::{
-    combinator::{alt, cut_err, delimited, fail, preceded, separated, separated_foldl1},
+    combinator::{alt, cut_err, delimited, preceded, separated, separated_foldl1},
     prelude::*,
     token::{any, one_of},
     Located,
@@ -282,7 +282,14 @@ fn char_value(input: &mut &[Token<'_>]) -> PResult<Expression> {
 }
 
 fn time_value(input: &mut &[Token<'_>]) -> PResult<Expression> {
-    fail.parse_next(input)
+    any.verify_map(|token: Token<'_>| match token {
+        Token::IsoDate(t) => Some(Expression::from(LiteralNode::new_date(json!(t.value())))),
+        Token::IsoTimestamp(t) => {
+            Some(Expression::from(LiteralNode::new_date(json!(t.value()))))
+        }
+        _ => None,
+    })
+    .parse_next(input)
 }
 
 fn int_value(input: &mut &[Token<'_>]) -> PResult<Expression> {

@@ -88,11 +88,17 @@ impl Expression {
                 serde_json::Value::Bool(true) => writer.write_str(".TRUE."),
                 serde_json::Value::Bool(false) => writer.write_str(".FALSE."),
                 serde_json::Value::Number(n) => writer.write_str(&n.to_string()),
-                serde_json::Value::String(_) => {
-                    let string =
-                        serde_json::to_string(node.value()).map_err(|_| core::fmt::Error)?;
-                    writer.write_str(&string)?;
-                    Ok(())
+                serde_json::Value::String(s) => {
+                    if node.is_date_literal {
+                        writer.write_char('#')?;
+                        writer.write_str(s)?;
+                        writer.write_char('#')
+                    } else {
+                        let string =
+                            serde_json::to_string(node.value()).map_err(|_| core::fmt::Error)?;
+                        writer.write_str(&string)?;
+                        Ok(())
+                    }
                 }
                 serde_json::Value::Array(_) => Err(core::fmt::Error),
                 serde_json::Value::Object(_) => Err(core::fmt::Error),

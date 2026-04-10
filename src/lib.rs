@@ -582,13 +582,28 @@ impl From<OpNode> for Expression {
 pub struct LiteralNode {
     /// The literal value
     pub value: Value,
+    /// Whether this literal was written as a date literal (`#YYYY-MM-DD#`)
+    pub is_date_literal: bool,
     span: Option<Span>,
 }
 
 impl LiteralNode {
     /// Create a new node
     pub fn new(value: Value) -> Self {
-        LiteralNode { value, span: None }
+        LiteralNode {
+            value,
+            is_date_literal: false,
+            span: None,
+        }
+    }
+
+    /// Create a new date literal node
+    pub fn new_date(value: Value) -> Self {
+        LiteralNode {
+            value,
+            is_date_literal: true,
+            span: None,
+        }
     }
 
     /// The literal value
@@ -1632,5 +1647,91 @@ mod tests {
         let context = EvaluateContext::new(&engine, &data).with_entry_field("ListingId");
         let result = expression.apply(context).unwrap();
         assert_eq!(result.into_owned(), json!(true));
+    }
+
+    #[test]
+    fn test_date_literal_parse() {
+        let expression = "#2024-01-01#".parse::<Expression>().unwrap();
+        assert_eq!(
+            expression,
+            Expression::Literal(LiteralNode::new_date(json!("2024-01-01")))
+        );
+    }
+
+    #[test]
+    fn test_date_literal_comparison() {
+        let data = json!({ "ListingContractDate": "2024-06-15" });
+        let result = eval("ListingContractDate >= #2024-01-01#", data);
+        assert_eq!(result, json!(true));
+    }
+
+    #[test]
+    fn test_date_literal_comparison_false() {
+        let data = json!({ "ListingContractDate": "2023-12-31" });
+        let result = eval("ListingContractDate >= #2024-01-01#", data);
+        assert_eq!(result, json!(false));
+    }
+
+    #[test]
+    fn test_date_literal_equality() {
+        let data = json!({ "D": "2024-01-01" });
+        let result = eval("D = #2024-01-01#", data);
+        assert_eq!(result, json!(true));
+    }
+
+    #[test]
+    fn test_date_literal_arithmetic_add() {
+        let data = json!({});
+        let result = eval("#2024-01-01# + 30", data);
+        assert_eq!(result, json!("2024-01-31"));
+    }
+
+    #[test]
+    fn test_date_literal_arithmetic_subtract_days() {
+        let data = json!({});
+        let result = eval("#2024-01-31# - 30", data);
+        assert_eq!(result, json!("2024-01-01"));
+    }
+
+    #[test]
+    fn test_date_literal_subtract_dates() {
+        let data = json!({});
+        let result = eval("#2024-01-31# - #2024-01-01#", data);
+        assert_eq!(result, json!(30));
+    }
+
+    #[test]
+    fn test_date_literal_roundtrip() {
+        let expr = "ListingContractDate >= #2024-01-01#";
+        let expression = expr.parse::<Expression>().unwrap();
+        assert_eq!(expression.serialize().unwrap(), expr);
+    }
+
+    #[test]
+    fn test_timestamp_literal_parse() {
+        let expression = "#2024-01-01T10:30:00Z#".parse::<Expression>().unwrap();
+        assert_eq!(
+            expression,
+            Expression::Literal(LiteralNode::new_date(json!("2024-01-01T10:30:00Z")))
+        );
+    }
+
+    #[test]
+    fn test_timestamp_literal_roundtrip() {
+        let expr = "#2024-01-01T10:30:00Z#";
+        let expression = expr.parse::<Expression>().unwrap();
+        assert_eq!(expression.serialize().unwrap(), expr);
+    }
+
+    #[test]
+    fn test_date_literal_invalid_rejected() {
+        let result = "#not-a-date#".parse::<Expression>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_date_literal_invalid_month_rejected() {
+        let result = "#2024-13-01#".parse::<Expression>();
+        assert!(result.is_err());
     }
 }
