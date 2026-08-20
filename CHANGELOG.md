@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/paulredmond/rets_expression/compare/v1.1.0...v1.1.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* stop SUBSTR panicking on reversed ranges and multi-byte input ([#8](https://github.com/paulredmond/rets_expression/issues/8)) ([b73e247](https://github.com/paulredmond/rets_expression/commit/b73e247121089cc293e596019a952be0b151fdc6))
+
 ## [1.1.0](https://github.com/paulredmond/rets_expression/compare/v1.0.1...v1.1.0) (2026-03-24)
 
 
