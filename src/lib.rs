@@ -1633,4 +1633,22 @@ mod tests {
         let result = expression.apply(context).unwrap();
         assert_eq!(result.into_owned(), json!(true));
     }
+
+    #[test]
+    fn test_substr_reversed_range_is_empty() {
+        assert_eq!(eval("SUBSTR('Example', 5, 2)", json!({})), json!(""));
+    }
+
+    #[test]
+    fn test_substr_start_past_end_of_string_is_empty() {
+        assert_eq!(eval("SUBSTR('Example', 20, 30)", json!({})), json!(""));
+    }
+
+    #[test]
+    fn test_substr_counts_characters_not_bytes() {
+        // 'Café' is four characters but five bytes, so byte indexing lands inside 'é'.
+        assert_eq!(eval("SUBSTR('Café', 1, 5)", json!({})), json!("Café"));
+        assert_eq!(eval("SUBSTR('Café', 4, 5)", json!({})), json!("é"));
+        assert_eq!(eval("SUBSTR('日本語', 2, 3)", json!({})), json!("本"));
+    }
 }
