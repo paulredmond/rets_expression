@@ -711,13 +711,16 @@ impl<T> Function<T> for SubstrFunction {
         if start == 0 || end == 0 {
             return Err(FunctionError::InvalidType);
         }
-        let start = start - 1;
-        let end = end - 1;
 
-        let start = core::cmp::min(start, str.len());
-        let end = core::cmp::min(end, str.len());
-        let str = &str[start..end];
-        Ok(Cow::Owned(Value::String(str.to_string())))
+        // Positions are end-exclusive and count characters, not bytes. Iterating by `char`
+        // keeps multi-byte input from landing mid-character, and `skip`/`take` clamp on
+        // their own, so a reversed or out-of-range range yields an empty string.
+        let substring: String = str
+            .chars()
+            .skip(start - 1)
+            .take(end.saturating_sub(start))
+            .collect();
+        Ok(Cow::Owned(Value::String(substring)))
     }
 }
 
